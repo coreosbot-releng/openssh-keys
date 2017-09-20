@@ -23,16 +23,19 @@
 //!
 //!     for (i, line) in reader.lines().enumerate() {
 //!         let line = line.expect(&format!("unable to read key at line {}", i + 1));
-//!         let pubkey = openssh_keys::PublicKey::parse(&line).expect("unable to parse RSA pubkey");
-//!         println!(" * Pubkey #{} -> {}", i + 1, pubkey.to_fingerprint_string());
+//!         let _pubkey = openssh_keys::PublicKey::parse(&line).expect("unable to parse RSA pubkey");
+//!         #[cfg(feature = "fingerprint")]
+//!         println!(" * Pubkey #{} -> {}", i + 1, _pubkey.to_fingerprint_string());
 //!     }
 //! }
 
 extern crate base64;
 extern crate byteorder;
-extern crate crypto;
 #[macro_use]
 extern crate error_chain;
+
+#[cfg(feature = "fingerprint")]
+extern crate crypto;
 
 mod reader;
 mod writer;
@@ -61,7 +64,9 @@ pub mod errors {
 
 use errors::*;
 
+#[cfg(feature = "fingerprint")]
 use crypto::digest::Digest;
+#[cfg(feature = "fingerprint")]
 use crypto::sha2::Sha256;
 
 use reader::Reader;
@@ -360,7 +365,7 @@ impl PublicKey {
         match self.data {
             Data::Rsa{ref modulus,..} => modulus.len()*8,
             Data::Dsa{ref p,..} => p.len()*8,
-            Data::Ed25519{..} => 256, // ??
+            Data::Ed25519{..} => 256,
             Data::Ecdsa{ref curve,..} => match *curve {
                 Curve::Nistp256 => 256,
                 Curve::Nistp384 => 384,
@@ -373,6 +378,7 @@ impl PublicKey {
     /// the format of the fingerprint is described tersely in
     /// https://tools.ietf.org/html/rfc4716#page-6. This uses the ssh-keygen
     /// defaults of a base64 encoded SHA256 hash.
+    #[cfg(feature = "fingerprint")]
     pub fn fingerprint(&self) -> String {
         let data = self.data();
         let mut hasher = Sha256::new();
@@ -395,6 +401,7 @@ impl PublicKey {
     /// https://github.com/openssh/openssh-portable/blob/master/ssh-keygen.c#L842
     /// right now it just sticks with the defaults of a base64 encoded SHA256
     /// hash.
+    #[cfg(feature = "fingerprint")]
     pub fn to_fingerprint_string(&self) -> String {
         let keytype = match self.data {
             Data::Rsa{..} => "RSA",
@@ -436,12 +443,14 @@ mod tests {
         assert_eq!("ssh-rsa", key.keytype());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn rsa_fingerprint() {
         let key = PublicKey::parse(TEST_RSA_KEY).unwrap();
         assert_eq!("SHA256:YTw/JyJmeAAle1/7zuZkPP0C73BQ+6XrFEt2/Wy++2o", key.fingerprint());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn rsa_fingerprint_string() {
         let key = PublicKey::parse(TEST_RSA_KEY).unwrap();
@@ -475,12 +484,14 @@ mod tests {
         assert_eq!("ssh-dss", key.keytype());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn dsa_fingerprint() {
         let key = PublicKey::parse(TEST_DSA_KEY).unwrap();
         assert_eq!("SHA256:/Pyxrjot1Hs5PN2Dpg/4pK2wxxtP9Igc3sDTAWIEXT4", key.fingerprint());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn dsa_fingerprint_string() {
         let key = PublicKey::parse(TEST_DSA_KEY).unwrap();
@@ -506,12 +517,14 @@ mod tests {
         assert_eq!("ssh-ed25519", key.keytype());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn ed25519_fingerprint() {
         let key = PublicKey::parse(TEST_ED25519_KEY).unwrap();
         assert_eq!("SHA256:A/lHzXxsgbp11dcKKfSDyNQIdep7EQgZEoRYVDBfNdI", key.fingerprint());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn ed25519_fingerprint_string() {
         let key = PublicKey::parse(TEST_ED25519_KEY).unwrap();
@@ -537,12 +550,14 @@ mod tests {
         assert_eq!("ecdsa-sha2-nistp256", key.keytype());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn ecdsa256_fingerprint() {
         let key = PublicKey::parse(TEST_ECDSA256_KEY).unwrap();
         assert_eq!("SHA256:BzS5YXMW/d2vFk8Oqh+nKmvKr8X/FTLBfJgDGLu5GAs", key.fingerprint());
     }
 
+    #[cfg(feature = "fingerprint")]
     #[test]
     fn ecdsa256_fingerprint_string() {
         let key = PublicKey::parse(TEST_ECDSA256_KEY).unwrap();

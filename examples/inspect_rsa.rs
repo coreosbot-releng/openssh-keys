@@ -1,3 +1,4 @@
+
 extern crate openssh_keys;
 
 use std::{env, fs, io, path};
@@ -12,7 +13,8 @@ fn main() {
 
     for (i, line) in reader.lines().enumerate() {
         let line = line.expect(&format!("unable to read key at line {}", i + 1));
-        let pubkey = openssh_keys::PublicKey::parse(&line).expect("unable to parse RSA pubkey");
-        println!(" * Pubkey #{} -> {}", i + 1, pubkey.to_fingerprint_string());
+        let _pubkey = openssh_keys::PublicKey::parse(&line).expect("unable to parse RSA pubkey");
+        #[cfg(feature = "fingerprint")]
+        println!(" * Pubkey #{} -> {}", i + 1, _pubkey.to_fingerprint_string());
     }
 }
