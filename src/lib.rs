@@ -84,6 +84,22 @@ const NISTP_256: &'static str = "nistp256";
 const NISTP_384: &'static str = "nistp384";
 const NISTP_521: &'static str = "nistp521";
 
+/// A type which stores a return value and warnings
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Report<T> {
+    value: T,
+    warnings: Vec<String>,
+}
+
+impl<T> fmt::Display for Report<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for warning in &self.warnings {
+            write!(f, "{}\n", warning)?
+        }
+        Ok(())
+    }
+}
+
 /// Curves for ECDSA
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
 pub enum Curve {
@@ -342,23 +358,30 @@ impl PublicKey {
     }
 
     /// read_keys takes a reader and parses it as an authorized_keys file. it
-    /// returns an error if it can't read or parse any of the public keys in the
-    /// list.
-    pub fn read_keys<R>(r: R) -> Result<Vec<Self>>
+    /// returns an error if it fails to read keys from the reader. it returns a
+    /// report type, which keeps track of parse errors. if it encounters a key
+    /// which it fails to parse, that key is elided from the returned list of
+    /// keys.
+    pub fn read_keys<R>(r: R) -> Result<Report<Vec<Self>>>
         where R: Read
     {
         let keybuf = BufReader::new(r);
         // authorized_keys files are newline-separated lists of public keys
-        let mut keys = vec![];
+        let mut report = Report::<Vec<Self>> {
+            value: vec![],
+            warnings: vec![],
+        };
         for key in keybuf.lines() {
             let key = key.chain_err(|| "failed to read public key")?;
             // skip any empty lines and any comment lines (prefixed with '#')
             if !key.is_empty() && !(key.trim().starts_with('#')) {
-                keys.push(PublicKey::parse(&key)
-                          .chain_err(|| "failed to parse public key")?);
+                match PublicKey::parse(&key) {
+                    Ok(pkey) => report.value.push(pkey),
+                    Err(e) => report.warnings.push(format!("failed to parse public key \"{}\": {}", key, e)),
+                }
             }
         }
-        Ok(keys)
+        Ok(report)
     }
 
     /// get an ssh public key from rsa components
@@ -743,11 +766,14 @@ agent-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAhBr6++FQXB8kkgOMbdxBuyrHz
 
 
 ssh-dss AAAAB3NzaC1kc3MAAACBAIkd9CkqldM2St8f53rfJT7kPgiA8leZaN7hdZd48hYJyKzVLoPdBMaGFuOwGjv0Im3JWqWAewANe0xeLceQL0rSFbM/mZV+1gc1nm1WmtVw4KJIlLXl3gS7NYfQ9Ith4wFnZd/xhRz9Q+MBsA1DgXew1zz4dLYI46KmFivJ7XDzAAAAFQC8z4VIhI4HlHTvB7FdwAfqWsvcOwAAAIBEqPIkW3HHDTSEhUhhV2AlIPNwI/bqaCXy2zYQ6iTT3oUh+N4xlRaBSvW+h2NC97U8cxd7Y0dXIbQKPzwNzRX1KA1F9WAuNzrx9KkpCg2TpqXShhp+Sseb+l6uJjthIYM6/0dvr9cBDMeExabPPgBo3Eii2NLbFSqIe86qav8hZAAAAIBk5AetZrG8varnzv1khkKh6Xq/nX9r1UgIOCQos2XOi2ErjlB9swYCzReo1RT7dalITVi7K9BtvJxbutQEOvN7JjJnPJs+M3OqRMMF+anXPdCWUIBxZUwctbkAD5joEjGDrNXHQEw9XixZ9p3wudbISnPFgZhS1sbS9Rlw5QogKg==
+ssh-invalid THISISNOTAKEY demos@invalid
 ";
         let key1 = "command=\"echo \\\"holy shell escaping batman\\\"\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAhBr6++FQXB8kkgOMbdxBuyrHzuX5HkElswrN6DQoN/ demos@siril";
         let key2 = "agent-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAhBr6++FQXB8kkgOMbdxBuyrHzuX5HkElswrN6DQoN/ demos@siril";
         let key3 = "ssh-dss AAAAB3NzaC1kc3MAAACBAIkd9CkqldM2St8f53rfJT7kPgiA8leZaN7hdZd48hYJyKzVLoPdBMaGFuOwGjv0Im3JWqWAewANe0xeLceQL0rSFbM/mZV+1gc1nm1WmtVw4KJIlLXl3gS7NYfQ9Ith4wFnZd/xhRz9Q+MBsA1DgXew1zz4dLYI46KmFivJ7XDzAAAAFQC8z4VIhI4HlHTvB7FdwAfqWsvcOwAAAIBEqPIkW3HHDTSEhUhhV2AlIPNwI/bqaCXy2zYQ6iTT3oUh+N4xlRaBSvW+h2NC97U8cxd7Y0dXIbQKPzwNzRX1KA1F9WAuNzrx9KkpCg2TpqXShhp+Sseb+l6uJjthIYM6/0dvr9cBDMeExabPPgBo3Eii2NLbFSqIe86qav8hZAAAAIBk5AetZrG8varnzv1khkKh6Xq/nX9r1UgIOCQos2XOi2ErjlB9swYCzReo1RT7dalITVi7K9BtvJxbutQEOvN7JjJnPJs+M3OqRMMF+anXPdCWUIBxZUwctbkAD5joEjGDrNXHQEw9XixZ9p3wudbISnPFgZhS1sbS9Rlw5QogKg== ";
-        let keys = PublicKey::read_keys(authorized_keys.as_bytes()).unwrap();
+        let report = PublicKey::read_keys(authorized_keys.as_bytes()).unwrap();
+        assert_eq!(report.warnings, vec!["failed to parse public key \"ssh-invalid THISISNOTAKEY demos@invalid\": invalid key format"]);
+        let keys = report.value;
         assert_eq!(key1, keys[0].to_string());
         assert_eq!(key2, keys[1].to_string());
         assert_eq!(key3, keys[2].to_string());
